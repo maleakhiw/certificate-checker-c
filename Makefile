@@ -1,17 +1,17 @@
 # Author: Maleakhi Agung Wijaya (maleakhiw)
 # Student ID: 784091
-# Makefile for COMP30023 Assignment 1
+# Makefile for COMP30023 Assignment 2
 
 # Constant
 CC = gcc
-CFLAGS = -lpthread
+CFLAGS = -lssl -lcrypto
 
 # Default if user type 'make'
-default: server
+default: certcheck
 
-server: server.c
-	$(CC) -Wall -o server server.c $(CFLAGS)
+certcheck: certcheck.c
+	$(CC) -Wall -o certcheck certcheck.c $(CFLAGS)
 
 # To clean the executable and object file
 clean:
-	-rm -f server
+	-rm -f certcheck
