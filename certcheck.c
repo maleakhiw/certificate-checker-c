@@ -4,7 +4,8 @@
  * Computer Systems (COMP30023) Project 2
  */
 
- /*****************************LIBRARY&CONSTANT********************************/
+ /********************************LIBRARY**************************************/
+
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/bio.h>
@@ -13,10 +14,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
+
+/********************************CONSTANT**************************************/
+
+#define MAX_DOMAIN_NAME 256
+
+#define VALID 1
+#define INVALID 0
+
+// #define DEBUG // used for debugging purposes
 
 /******************************FUNCTION*DECLARATION***************************/
 
-int is_certificate_date_valid(ASN1_TIME *not_before, ASN1_TIME *not_after);
+int is_certificate_date_valid(X509* cert);
+int is_domain_name_valid(X509 *cert, char *certificate_url);
+int is_wildcard_exist(char *str);
 
 /** Testing date */
 // // Used for printing
@@ -52,8 +65,8 @@ int main() {
     X509 *cert = NULL;
     // X509_NAME *cert_issuer = NULL;
     // X509_CINF *cert_inf = NULL;
-    ASN1_TIME *not_before = NULL;
-    ASN1_TIME *not_after = NULL;
+    // ASN1_TIME *not_before = NULL; // must not be freed up by docs
+    // ASN1_TIME *not_after = NULL; // must not be freed up by docs
     // STACK_OF(X509_EXTENSION) * ext_list;
 
     //initialise openSSL
@@ -96,13 +109,16 @@ int main() {
     // printf("Date not before: %s\n", not_before_str);
 
     // Read not before and not after date
-    not_before = X509_get_notBefore(cert);
-    not_after = X509_get_notAfter(cert);
-
-    int validity = is_certificate_date_valid(not_before, not_after);
+    int validity = is_certificate_date_valid(cert);
+    #ifdef DEBUG
     printf("The certificates is %d\n", validity);
+    #endif
 
-    /************* Testing Minimum Key Length ****************/
+    /**************** Domain Name validation ******************************/
+
+    int validity2 = is_domain_name_valid(cert, "www.google.com");
+
+    /********************************************************************/
 
     // // // Analysing the certificate value
     // cert_issuer = X509_get_issuer_name(cert);
@@ -149,13 +165,15 @@ int main() {
 
 /**
  * Used to check whether the certificate date is currently valid
- * @param not_before: indicate not_before date
- * @param not_after: indicate not_after date
- * @return 0: invalid date range, 1: valid date range
+ * @param cert: certificates
+ * @return VALID, INVALID
  */
-int is_certificate_date_valid(ASN1_TIME *not_before, ASN1_TIME *not_after) {
+int is_certificate_date_valid(X509 *cert) {
 	int day, sec;
-	ASN1_TIME *today = NULL;
+	ASN1_TIME *not_before = NULL, *not_after = NULL, *today = NULL;
+
+	not_before = X509_get_notBefore(cert);
+	not_after = X509_get_notAfter(cert);
 
 	// Current date should be between the not before and not after date
 	// Check not_before first with today's date, immediately return 0 (invalid)
@@ -167,7 +185,7 @@ int is_certificate_date_valid(ASN1_TIME *not_before, ASN1_TIME *not_after) {
 
 	// If today's date is before not_before date
 	if (day < 0 || sec < 0) {
-		return 0; // invalid
+		return INVALID;
 	}
 
 	// Check not_after date with today's date, today's date should be before
@@ -179,8 +197,82 @@ int is_certificate_date_valid(ASN1_TIME *not_before, ASN1_TIME *not_after) {
 
 	// If not_after date is before today's date
 	if (day < 0 || sec < 0) {
-		return 0; // invalid
+		return INVALID;
 	}
 
-	return 1; // it is valid if within range
+	return VALID; // it is valid if within range
 }
+
+/**
+ * Used to check whether the domain name of the certificate is valid
+ * @param cert: certificate used to extract subject SAN and subject CN
+ * @param certificate_url: URL from which certificates belongs (column 2)
+ * @return VALID, INVALID
+ */
+int is_domain_name_valid(X509 *cert, char *certificate_url) {
+	// Variable for CN
+	X509_NAME *cert_subject = NULL;
+	char common_name[MAX_DOMAIN_NAME] = "Subject CN NOT FOUND.";
+
+	// Variable for SAN
+	STACK_OF(GENERAL_NAME) *san_names = NULL;
+	int san_names_count, length_san_array, i;
+
+	/* Process to get Common Name */
+	cert_subject = X509_get_subject_name(cert);
+	X509_NAME_get_text_by_NID(cert_subject, NID_commonName, common_name, MAX_DOMAIN_NAME);
+
+	#ifdef DEBUG
+	printf("Subject common name: %s\n", common_name);
+	#endif
+
+	/* Process to get SAN */
+	san_names = X509_get_ext_d2i((X509 *) cert, NID_subject_alt_name, NULL, NULL);
+
+	/** Validity check */
+	// If san names not null, we will process san names in addition to common name
+	if (san_names != NULL) {
+		san_names_count = sk_GENERAL_NAME_num(san_names);
+
+		// Array used to hold SAN
+		char san_array[san_names_count][MAX_DOMAIN_NAME];
+		// Iterate and fill the SAN array
+		for (i=0; i<san_names_count; i++) {
+			const GENERAL_NAME *current_name = sk_GENERAL_NAME_value(san_names, i);
+
+			if (current_name->type == GEN_DNS) {
+				// Current name is a DNS name, let's check it
+				char *dns_name = (char *) ASN1_STRING_data(current_name->d.dNSName);
+				strcpy(san_array[i], dns_name);
+			}
+		}
+		length_san_array = i; // elements filled
+		sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
+
+		#ifdef DEBUG
+		for (i = 0; i < length_san_array; i++) {
+			printf("SAN: %s\n", san_array[i]);
+		}
+		#endif
+
+		// TODO: validity check by comparing with both common name and san name
+
+	}
+	// If there is no san name
+	else {
+		// TODO: Just compare with common name
+	}
+}
+
+/**
+ * Used to check whether a VALID (leftmost) wildcard exist in a particular string
+ * @param str: string to be checked
+ * @return VALID, INVALID
+ */
+ int is_wildcard_exist(char *str) {
+	 assert(str != NULL);
+	 if (str[0] == '*' && strlen(str) > 2) {
+		 return VALID;
+	 }
+	 return INVALID;
+ }
