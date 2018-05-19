@@ -11,6 +11,8 @@
 #include <openssl/bio.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/rsa.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,6 +26,9 @@
 #define VALID 1
 #define INVALID 0
 
+#define BITS_CONVERSION 8
+#define MINIMUM_KEY_LENGTH 2048
+
 // #define DEBUG // used for debugging purposes
 
 /******************************FUNCTION*DECLARATION***************************/
@@ -33,6 +38,7 @@ int is_domain_name_valid(X509 *cert, char *certificate_url);
 int is_valid_wildcard_exist(char *str);
 int check_single_name(char *single_name, char *host_name);
 int check_san(char **san_array, int length_san_array, char *host_name);
+int is_key_length_valid(X509 *cert);
 
 /** Testing date */
 // // Used for printing
@@ -364,4 +370,30 @@ int check_san(char **san_array, int length_san_array, char *host_name) {
 		}
 	}
 	return INVALID; // cannot find anything similar
+}
+
+/**
+ * Check validity of RSA key length
+ * @param cert: certificate
+ * @return VALID if (>= 2048 bits), INVALID otherwise
+ */
+int is_key_length_valid(X509 *cert) {
+	EVP_PKEY *public_key = X509_get_pubkey(cert);
+	RSA *rsa = EVP_PKEY_get0_RSA(public_key);
+	int size = RSA_size(rsa);
+	int size_in_bits = size * BITS_CONVERSION;
+
+	int is_valid; // capture validity result
+
+	// Perform check of >= 2048
+	if (size_in_bits >= MINIMUM_KEY_LENGTH) {
+		is_valid = VALID;
+	}
+	else {
+		is_valid = INVALID;
+	}
+
+	RSA_free(rsa);
+
+	return is_valid;
 }
