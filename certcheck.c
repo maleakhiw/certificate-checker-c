@@ -379,7 +379,7 @@ int check_san(char **san_array, int length_san_array, char *host_name) {
  */
 int is_key_length_valid(X509 *cert) {
 	EVP_PKEY *public_key = X509_get_pubkey(cert);
-	RSA *rsa = EVP_PKEY_get0_RSA(public_key);
+	RSA *rsa = EVP_PKEY_get1_RSA(public_key);
 	int size = RSA_size(rsa);
 	int size_in_bits = size * BITS_CONVERSION;
 
