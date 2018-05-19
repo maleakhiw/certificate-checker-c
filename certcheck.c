@@ -19,6 +19,7 @@
 /********************************CONSTANT**************************************/
 
 #define MAX_DOMAIN_NAME 256
+#define WILDCARD_OFFSET 2
 
 #define VALID 1
 #define INVALID 0
@@ -29,7 +30,9 @@
 
 int is_certificate_date_valid(X509* cert);
 int is_domain_name_valid(X509 *cert, char *certificate_url);
-int is_wildcard_exist(char *str);
+int is_valid_wildcard_exist(char *str);
+int check_single_name(char *single_name, char *host_name);
+int check_san(char **san_array, int length_san_array, char *host_name);
 
 /** Testing date */
 // // Used for printing
@@ -109,14 +112,31 @@ int main() {
     // printf("Date not before: %s\n", not_before_str);
 
     // Read not before and not after date
-    int validity = is_certificate_date_valid(cert);
+    is_certificate_date_valid(cert);
     #ifdef DEBUG
     printf("The certificates is %d\n", validity);
     #endif
 
     /**************** Domain Name validation ******************************/
 
-    int validity2 = is_domain_name_valid(cert, "www.google.com");
+    int test = is_domain_name_valid(cert, "b*r.com");
+    // char **san_array = (char **) malloc(sizeof(char *) * 3);
+    // san_array[0] = (char *) malloc(sizeof(char) * (strlen("*.google.com") + 1));
+    // strcpy(san_array[0], "*.google.com");
+    // san_array[1] = (char *) malloc(sizeof(char) * (strlen("drive.google.co.au") + 1));
+    // strcpy(san_array[1], "drive.google.co.au");
+    // san_array[2] = (char *) malloc(sizeof(char) * (strlen("anon.com") + 1));
+    // strcpy(san_array[2], "anon.com");
+    //
+    //
+    // // char san_array[][256] = {"google.com.au", "*.google.com", "*.anonymous.com"};
+    // // int i;
+    // // for (i = 0; i < 3; i++) {
+    // //     printf("%s\n",san_array[i]);
+    // // }
+    // int test = check_san(san_array, 3, "anon.com");
+    // // int test = check_single_name("*.google.com.au", "drive.google.com.au");
+    printf("test: %d\n", test);
 
     /********************************************************************/
 
@@ -235,7 +255,7 @@ int is_domain_name_valid(X509 *cert, char *certificate_url) {
 		san_names_count = sk_GENERAL_NAME_num(san_names);
 
 		// Array used to hold SAN
-		char san_array[san_names_count][MAX_DOMAIN_NAME];
+		char **san_array = (char **) malloc(sizeof(char *) * san_names_count);
 		// Iterate and fill the SAN array
 		for (i=0; i<san_names_count; i++) {
 			const GENERAL_NAME *current_name = sk_GENERAL_NAME_value(san_names, i);
@@ -243,6 +263,7 @@ int is_domain_name_valid(X509 *cert, char *certificate_url) {
 			if (current_name->type == GEN_DNS) {
 				// Current name is a DNS name, let's check it
 				char *dns_name = (char *) ASN1_STRING_data(current_name->d.dNSName);
+				san_array[i] = (char *) malloc(sizeof(char) * (strlen(dns_name) + 1)); // extra nullbyte
 				strcpy(san_array[i], dns_name);
 			}
 		}
@@ -255,12 +276,14 @@ int is_domain_name_valid(X509 *cert, char *certificate_url) {
 		}
 		#endif
 
-		// TODO: validity check by comparing with both common name and san name
-
+		// Check validity by comparing with both common name and san name
+		return (check_single_name(common_name, certificate_url) ||
+					check_san(san_array, length_san_array, certificate_url));
 	}
 	// If there is no san name
 	else {
-		// TODO: Just compare with common name
+		// Just compare with common name
+		return check_single_name(common_name, certificate_url);
 	}
 }
 
@@ -269,10 +292,76 @@ int is_domain_name_valid(X509 *cert, char *certificate_url) {
  * @param str: string to be checked
  * @return VALID, INVALID
  */
- int is_wildcard_exist(char *str) {
-	 assert(str != NULL);
-	 if (str[0] == '*' && strlen(str) > 2) {
-		 return VALID;
+int is_valid_wildcard_exist(char *str) {
+	assert(str != NULL);
+
+	// If leftmost wildcard and not only containing wildcard
+	if (str[0] == '*' && str[1] == '.' && strlen(str) > WILDCARD_OFFSET) {
+		return VALID;
+	}
+	return INVALID;
+}
+
+/**
+ * Used to compare host name/ certificate_url with single name
+ * @param single_name: string representing a name
+ * @param host_name: string representing host name
+ * @return VALID: host name == common name, INVALID: otherwise
+ */
+int check_single_name(char *single_name, char *host_name) {
+	int i, offset_index_host = 0;
+	char *offset_single_name = NULL, *offset_host_name = NULL;
+
+	 // If no wildcard exist, just compare normally
+	 if (!is_valid_wildcard_exist(single_name)) {
+		 // If the same, then it is valid
+		 if (strcmp(single_name, host_name) == 0) {
+			 return VALID;
+		 }
+		 else {
+			 return INVALID;
+		 }
 	 }
-	 return INVALID;
+	 // Otherwise wildcard exist, process differently
+	 else {
+		 // Offset name that will be compared without the wildcard
+		 offset_single_name = (single_name + WILDCARD_OFFSET);
+
+		 // Search for the first dot location and get everything after the first dot
+		 for (i = 0; i < strlen(host_name); i++) {
+			 if (host_name[i] == '.') {
+				 offset_index_host = i + 1;
+				 break;
+			 }
+		 }
+		 offset_host_name = (host_name + offset_index_host);
+
+		 // Perform comparison
+		 if (strcmp(offset_single_name, offset_host_name) == 0) {
+			 return VALID;
+		 }
+		 else {
+			 return INVALID;
+		 }
+	 }
  }
+
+/**
+ * Used to compare SAN with host name/ certificate_url
+ * @param san_name: array of strings
+ * @param length_san_array: length of san_array
+ * @param host_name: string representing host name
+ * @return VALID if host name is contain in the san name, INVALID otherwise
+ */
+int check_san(char **san_array, int length_san_array, char *host_name) {
+	int i;
+
+	// Iterate through san_array and compare with host name
+	for (i = 0; i < length_san_array; i++) {
+		// If there is an alternative name that match with host name, VALID
+		if (check_single_name(san_array[i], host_name) == VALID) {
+			return VALID;
+		}
+	}
+	return INVALID; // cannot find anything similar
+}
