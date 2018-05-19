@@ -5,13 +5,12 @@
 # Constant
 CC = gcc
 CFLAGS = -lssl -lcrypto
-HEADERS = -I/usr/local/openssl
 
 # Default if user type 'make'
 default: certcheck
 
 certcheck: certcheck.c
-	$(CC) -Wall -o certcheck certcheck.c $(HEADERS) $(CFLAGS)
+	$(CC) -Wall -o certcheck certcheck.c $(CFLAGS)
 
 # To clean the executable and object file
 clean:
