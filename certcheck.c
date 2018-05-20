@@ -21,6 +21,7 @@
 
 /********************************CONSTANT**************************************/
 
+#define DEFAULT_SIZE 2000
 #define ARG_COUNT 2
 #define FILE_PATH_INDEX 1
 #define MAX_DOMAIN_NAME 256
@@ -33,15 +34,18 @@
 #define MINIMUM_KEY_LENGTH 2048
 #define EXTENDED_KEY_AUTH "TLS Web Server Authentication"
 #define NAME_BUFFER_LENGTH 1024
+#define OUTPUT_FILE "output.csv"
 
 // Used for printing information (need to remove this before submitting)
-#define PRINT_DATE
-#define PRINT_DOMAIN
-#define PRINT_KEY_LENGTH
-#define PRINT_KEY_USAGE
+// #define PRINT_DATE
+// #define PRINT_DOMAIN
+// #define PRINT_KEY_LENGTH
+// #define PRINT_KEY_USAGE
 
 /******************************FUNCTION*DECLARATION***************************/
 
+char *read_line(FILE *input_fp);
+void get_certificate_host_name(char *line, char **certificate_name, char **host_name);
 int is_certificate_date_valid(X509* cert);
 int is_domain_name_valid(X509 *cert, char *certificate_url);
 int fill_san_array(STACK_OF(GENERAL_NAME) *san_names, char ***san_array);
@@ -53,77 +57,127 @@ int is_key_length_valid(X509 *cert);
 int is_ca_false_valid(X509 *cert);
 int is_extended_key_usage_valid(X509* cert);
 void ext_name_value(X509 *cert, int NID, char name_buffer[], char **value_buffer);
+int full_certificate_validation(char *certificate_name, char *host_name);
 
 /*********************************MAIN*FUNCTION********************************/
 
 int main(int argc, char *argv[]) {
-    char *test_cert_example;
-    BIO *certificate_bio = NULL;
-    X509 *cert = NULL;
+    char *csv_file = NULL;
+    FILE *input_fp = NULL, *output_fp = NULL;
+    char *line = NULL;
+    char *certificate_name = NULL, *host_name = NULL;
     int is_valid;
 
-    /* Initialise (opening file check command line argument) */
+    /* Initialise (opening file check command line argument) & read csv */
     if (argc != ARG_COUNT) {
         fprintf(stderr, "Please use the correct format: ./certcheck [pathToTestFile]\n");
         exit(EXIT_FAILURE);
     }
     // Read file name
-    test_cert_example = (char *) malloc(sizeof(char) * (strlen(argv[FILE_PATH_INDEX])+1));
-    strcpy(test_cert_example, argv[FILE_PATH_INDEX]);
+    csv_file = (char *) malloc(sizeof(char) * (strlen(argv[FILE_PATH_INDEX])+1));
+    assert(csv_file != NULL);
+    strcpy(csv_file, argv[FILE_PATH_INDEX]);
 
-    /* Initialise open ssl and bio certificate */
-    // Initialise openSSL
-    OpenSSL_add_all_algorithms();
-    ERR_load_BIO_strings();
-    ERR_load_crypto_strings();
-
-    // Create BIO object to read certificate
-    certificate_bio = BIO_new(BIO_s_file());
-
-    // Read certificate into BIO
-    if (!(BIO_read_filename(certificate_bio, test_cert_example)))
-    {
-        fprintf(stderr, "Error in reading cert BIO filename\n");
-        exit(EXIT_FAILURE);
-    }
-    // Read into cert which contains the X509 certificate and can be used to analyse the certificate
-    if (!(cert = PEM_read_bio_X509(certificate_bio, NULL, 0, NULL)))
-    {
-        fprintf(stderr, "Error in loading certificate\n");
+    // Read CSV from the specified file name
+    // Opening file for reading and writing
+    input_fp = fopen(csv_file, "r");
+    output_fp = fopen(OUTPUT_FILE, "w+");
+    if ((input_fp == NULL) || (output_fp == NULL)) {
+        perror("Error opening file");
         exit(EXIT_FAILURE);
     }
 
-    /* Testing validation of dates */
-    // Read not before and not after date
-    is_valid = is_certificate_date_valid(cert);
-    #ifdef PRINT_DATE
-    printf("Date Validation: %d\n", is_valid);
-    #endif
+    // Read from input file and output to output file
+    while ((line = read_line(input_fp)) != NULL) {
+        // Process the line and separate certificate name and host name
+        get_certificate_host_name(line, &certificate_name, &host_name);
 
-    /* Domain name validation (CN & SAN) */
-    is_valid = is_domain_name_valid(cert, "www.comp30023.com");
-    #ifdef PRINT_DOMAIN
-    printf("Domain name validation: %d\n", is_valid);
-    #endif
+        /* Process full validation of certificate */
+        is_valid = full_certificate_validation(certificate_name, host_name);
 
-    /* RSA key length validation */
-    is_valid = is_key_length_valid(cert);
-    #ifdef PRINT_KEY_LENGTH
-    printf("Key length validation: %d\n", is_valid);
-    #endif
+        // Write to output file
+        fputs(line, output_fp);
+        fprintf(output_fp, ",%d\n", is_valid);
 
-    /* Correct key usage validation (Basic Constraint & Extended Key Usage) */
-    is_valid = (is_ca_false_valid(cert) && is_extended_key_usage_valid(cert));
-    #ifdef PRINT_KEY_USAGE
-    printf("Key usage validation: %d\n", is_valid);
-    #endif
+        // Defensive style free
+        free(line);
+        free(certificate_name);
+        free(host_name);
+        line = NULL;
+        certificate_name = NULL;
+        host_name = NULL;
+    }
 
-    X509_free(cert);
-    BIO_free_all(certificate_bio);
+    free(csv_file);
+
+    // Close file
+    fclose(input_fp);
+    fclose(output_fp);
+
     return 0;
 }
 
 /*******************************FUNCTIONS**************************************/
+
+/*
+ * Used to read a line in csv file which also handle realloc buffer size
+ * @param input_fp: Input file pointer
+ * @return buffer: the string buffer
+ */
+char *read_line(FILE *input_fp) {
+    int size = DEFAULT_SIZE, ch, position = 0;
+    char *buffer = (char *) malloc(sizeof(char) * size);
+    assert(buffer != NULL);
+
+    // Read input per one character until a new line or EOF
+    while ((ch = fgetc(input_fp)) != '\n' && ch != EOF && !feof(input_fp)) {
+        buffer[position++] = ch;
+
+        // Check if needed more memory because buffer size cannot accommodate
+        if (position == size) {
+            size *= 2; // increase the size by 2 times (geometric increase)
+            buffer = (char *) realloc(buffer, size);
+            assert(buffer != NULL);
+        }
+        buffer[position] = '\0'; // nullbyte
+    }
+
+    // Indication of EOF, return NULL
+    if (position == 0) {
+        free(buffer); // buffer are not used, free it
+        return NULL;
+    }
+
+    return buffer;
+}
+
+/*
+ * Used to separate line string (CSV format) into two array
+ * @param line: string which we will be separating
+ * @param certificate_name: pointer of certificate name to be filled
+ * @param host_name: pointer of host name to be filled
+ */
+void get_certificate_host_name(char *line, char **certificate_name, char **host_name) {
+    char *delimiter_csv = ",", *delimiter_new_line = "\n", *token;
+
+    // As strtok will break string, create a new string for line
+    char *new_line = (char *) malloc(sizeof(char) * (strlen(line)+1));
+    assert(new_line != NULL);
+    strcpy(new_line, line);
+
+    // Tokenize line
+    token = strtok(new_line, delimiter_csv);
+    *certificate_name = (char *) malloc(sizeof(char) * (strlen(line)+1));
+    assert(certificate_name != NULL);
+    strcpy(*certificate_name, token);
+
+    token = strtok(NULL, delimiter_new_line);
+    *host_name = (char *) malloc(sizeof(char) * (strlen(line)+1));
+    assert(host_name != NULL);
+    strcpy(*host_name, token);
+
+    free(new_line);
+}
 
 /**
  * Used to check whether the certificate date is currently valid
@@ -252,6 +306,7 @@ int fill_san_array(STACK_OF(GENERAL_NAME) *san_names, char ***san_array) {
 
     // Array used to hold SAN
     *san_array = (char **) malloc(sizeof(char *) * san_names_count);
+    assert(*san_array != NULL);
     // Iterate and fill the SAN array
     for (i=0; i<san_names_count; i++) {
         const GENERAL_NAME *current_name = sk_GENERAL_NAME_value(san_names, i);
@@ -260,6 +315,7 @@ int fill_san_array(STACK_OF(GENERAL_NAME) *san_names, char ***san_array) {
             // Copy san name to san array
             char *dns_name = (char *) ASN1_STRING_data(current_name->d.dNSName);
             (*san_array)[i] = (char *) malloc(sizeof(char) * (strlen(dns_name)+1)); // extra nullbyte
+            assert((*san_array)[i] != NULL);
             strcpy((*san_array)[i], dns_name);
         }
     }
@@ -491,9 +547,72 @@ void ext_name_value(X509 *cert, int NID, char name_buffer[], char **value_buffer
     // Store the value of extension in value_buffer
     // bptr->data is not NULL terminated - add null character
     *value_buffer = (char *) malloc((bptr->length + 1) * sizeof(char));
+    assert(*value_buffer != NULL);
     memcpy(*value_buffer, bptr->data, bptr->length);
     (*value_buffer)[bptr->length] = '\0';
 
     // Free the bio
     BIO_free_all(bio);
+}
+
+/**
+ * Used to aggregate full validation check on the certificate
+ * @param certificate_name: string where the certificate is located
+ * @param host_name: string for the host name (second column in csv)
+ * @return VALID, INVALID
+ */
+int full_certificate_validation(char *certificate_name, char *host_name) {
+    BIO *certificate_bio = NULL;
+    X509 *cert = NULL;
+    int is_valid_date, is_valid_domain, is_valid_length, is_valid_usage;
+
+    /* Initialise open ssl and bio certificate */
+    // Initialise openSSL
+    OpenSSL_add_all_algorithms();
+    ERR_load_BIO_strings();
+    ERR_load_crypto_strings();
+
+    // Create BIO object to read certificate
+    certificate_bio = BIO_new(BIO_s_file());
+
+    // Read certificate into BIO
+    if (!(BIO_read_filename(certificate_bio, certificate_name))) {
+        fprintf(stderr, "Error in reading cert BIO filename\n");
+        exit(EXIT_FAILURE);
+    }
+    // Read into cert which contains the X509 certificate and can be used to analyse the certificate
+    if (!(cert = PEM_read_bio_X509(certificate_bio, NULL, 0, NULL))) {
+        fprintf(stderr, "Error in loading certificate\n");
+        exit(EXIT_FAILURE);
+    }
+
+    /* Testing validation of dates */
+    // Read not before and not after date
+    is_valid_date = is_certificate_date_valid(cert);
+    #ifdef PRINT_DATE
+    printf("Date Validation: %d\n", is_valid_date);
+    #endif
+
+    /* Domain name validation (CN & SAN) */
+    is_valid_domain = is_domain_name_valid(cert, host_name);
+    #ifdef PRINT_DOMAIN
+    printf("Domain name validation: %d\n", is_valid_domain);
+    #endif
+
+    /* RSA key length validation */
+    is_valid_length = is_key_length_valid(cert);
+    #ifdef PRINT_KEY_LENGTH
+    printf("Key length validation: %d\n", is_valid_length);
+    #endif
+
+    /* Correct key usage validation (Basic Constraint & Extended Key Usage) */
+    is_valid_usage = (is_ca_false_valid(cert) && is_extended_key_usage_valid(cert));
+    #ifdef PRINT_KEY_USAGE
+    printf("Key usage validation: %d\n", is_valid_usage);
+    #endif
+
+    X509_free(cert);
+    BIO_free_all(certificate_bio);
+
+    return (is_valid_date && is_valid_domain && is_valid_length && is_valid_usage);
 }
