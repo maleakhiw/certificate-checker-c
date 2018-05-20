@@ -8,6 +8,7 @@
 
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
+#include <openssl/asn1.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
@@ -22,17 +23,15 @@
 
 #define MAX_DOMAIN_NAME 256
 #define WILDCARD_OFFSET 2
-
 #define VALID 1
 #define INVALID 0
-
 #define BITS_CONVERSION 8
 #define MINIMUM_KEY_LENGTH 2048
-
 #define EXTENDED_KEY_AUTH "TLS Web Server Authentication"
 #define NAME_BUFFER_LENGTH 1024
 
-// #define DEBUG // used for debugging purposes
+// Used for debugging purposes
+#define PRINT_DATE
 
 /******************************FUNCTION*DECLARATION***************************/
 
@@ -46,53 +45,24 @@ int is_ca_false_valid(X509 *cert);
 void ext_name_value(X509 *cert, int NID, char name_buffer[], char **value_buffer);
 int is_extended_key_usage_valid(X509* cert);
 
-/** Testing date */
-// // Used for printing
-// #define DATE_LEN 128
-//
-// int convert_ASN1TIME(ASN1_TIME *t, char* buf, size_t len)
-// {
-// 	int rc;
-// 	BIO *b = BIO_new(BIO_s_mem());
-// 	rc = ASN1_TIME_print(b, t);
-// 	if (rc <= 0) {
-// 		// log_error("fetchdaemon", "ASN1_TIME_print failed or wrote no data.\n");
-// 		BIO_free(b);
-// 		return EXIT_FAILURE;
-// 	}
-// 	rc = BIO_gets(b, buf, len);
-// 	if (rc <= 0) {
-// 		// log_error("fetchdaemon", "BIO_gets call failed to transfer contents to buf");
-// 		BIO_free(b);
-// 		return EXIT_FAILURE;
-// 	}
-// 	BIO_free(b);
-// 	return EXIT_SUCCESS;
-// }
-
-// int check_valid_date()
-
 /*********************************MAIN*FUNCTION********************************/
 
 int main() {
     const char test_cert_example[] = "./cert-file2.pem";
     BIO *certificate_bio = NULL;
     X509 *cert = NULL;
-    // X509_NAME *cert_issuer = NULL;
-    // X509_CINF *cert_inf = NULL;
-    // ASN1_TIME *not_before = NULL; // must not be freed up by docs
-    // ASN1_TIME *not_after = NULL; // must not be freed up by docs
-    // STACK_OF(X509_EXTENSION) * ext_list;
+    int is_valid;
 
-    //initialise openSSL
+    /** Initialise open ssl and bio certificate */
+    // Initialise openSSL
     OpenSSL_add_all_algorithms();
     ERR_load_BIO_strings();
     ERR_load_crypto_strings();
 
-    //create BIO object to read certificate
+    // Create BIO object to read certificate
     certificate_bio = BIO_new(BIO_s_file());
 
-    //Read certificate into BIO
+    // Read certificate into BIO
     if (!(BIO_read_filename(certificate_bio, test_cert_example)))
     {
         fprintf(stderr, "Error in reading cert BIO filename");
@@ -104,29 +74,12 @@ int main() {
         fprintf(stderr, "Error in loading certificate");
         exit(EXIT_FAILURE);
     }
-    /************** Testing Date Validity ***************/
 
-    /** Testing date */
-    // struct tm time = {};
-    // time.tm_mday = 1;
-    // time.tm_mon = 4;
-    // time.tm_year = 130;
-    //
-    // time_t future_time = mktime(&time);
-    // ASN1_TIME * future_date = ASN1_TIME_set(NULL, future_time);
-    //
-    // char not_after_str[DATE_LEN];
-    // convert_ASN1TIME(future_date, not_after_str, DATE_LEN);
-    // printf("Date not after: %s\n", not_after_str);
-
-    // char not_before_str[DATE_LEN];
-    // convert_ASN1TIME(not_before, not_before_str, DATE_LEN);
-    // printf("Date not before: %s\n", not_before_str);
-
+    /** Testing validation of dates */
     // Read not before and not after date
-    is_certificate_date_valid(cert);
-    #ifdef DEBUG
-    printf("The certificates is %d\n", validity);
+    is_valid = is_certificate_date_valid(cert);
+    #ifdef PRINT_DATE
+    printf("Date Validation: %d\n", is_valid);
     #endif
 
     /**************** Domain Name validation ******************************/
@@ -283,6 +236,21 @@ int is_certificate_date_valid(X509 *cert) {
 
 	not_before = X509_get_notBefore(cert);
 	not_after = X509_get_notAfter(cert);
+
+    #ifdef PRINT_DATE
+    BIO *b;
+    b = BIO_new_fp(stdout, BIO_NOCLOSE);
+
+    printf("Not before date: ");
+    ASN1_TIME_print(b, not_before);
+    printf("\n");
+
+    printf("Not after date: ");
+    ASN1_TIME_print(b, not_after);
+    printf("\n");
+
+    BIO_free(b);
+    #endif
 
 	// Current date should be between the not before and not after date
 	// Check not_before first with today's date, immediately return 0 (invalid)
@@ -552,6 +520,11 @@ void ext_name_value(X509 *cert, int NID, char name_buffer[], char **value_buffer
     // Need to check extension exists and is not null
     X509_EXTENSION *ex = X509_get_ext(cert, X509_get_ext_by_NID(cert,
         NID, -1));
+    // If extension is null then immediately return and will be invalid
+    if (ex == NULL) {
+        return;
+    }
+
     ASN1_OBJECT *obj = X509_EXTENSION_get_object(ex);
     OBJ_obj2txt(name_buffer, NAME_BUFFER_LENGTH, obj, 0);
 
@@ -566,7 +539,7 @@ void ext_name_value(X509 *cert, int NID, char name_buffer[], char **value_buffer
     BIO_get_mem_ptr(bio, &bptr);
 
     // Store the value of extension in value_buffer
-    //bptr->data is not NULL terminated - add null character
+    // bptr->data is not NULL terminated - add null character
     *value_buffer = (char *) malloc((bptr->length + 1) * sizeof(char));
     memcpy(*value_buffer, bptr->data, bptr->length);
     (*value_buffer)[bptr->length] = '\0';
