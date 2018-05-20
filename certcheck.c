@@ -22,6 +22,8 @@
 /********************************CONSTANT**************************************/
 
 #define MAX_DOMAIN_NAME 256
+#define WILDCARD_POSITION 0
+#define DOT_POSITION 1
 #define WILDCARD_OFFSET 2
 #define VALID 1
 #define INVALID 0
@@ -30,13 +32,16 @@
 #define EXTENDED_KEY_AUTH "TLS Web Server Authentication"
 #define NAME_BUFFER_LENGTH 1024
 
-// Used for debugging purposes
-#define PRINT_DATE
+// Used for printing information (need to remove this before submitting)
+// #define PRINT_DATE
+#define PRINT_DOMAIN
 
 /******************************FUNCTION*DECLARATION***************************/
 
 int is_certificate_date_valid(X509* cert);
 int is_domain_name_valid(X509 *cert, char *certificate_url);
+int fill_san_array(STACK_OF(GENERAL_NAME) *san_names, char ***san_array);
+void free_san_array(char ***san_array, int length_san_array);
 int is_valid_wildcard_exist(char *str);
 int check_single_name(char *single_name, char *host_name);
 int check_san(char **san_array, int length_san_array, char *host_name);
@@ -82,7 +87,12 @@ int main() {
     printf("Date Validation: %d\n", is_valid);
     #endif
 
-    /**************** Domain Name validation ******************************/
+    /** Domain name validation (CN & SAN) */
+    is_valid = is_domain_name_valid(cert, "googl.com");
+    #ifdef PRINT_DOMAIN
+    printf("Domain name validation: %d\n", is_valid);
+    #endif
+
 
     // int test = is_domain_name_valid(cert, "b*r.com");
     // char **san_array = (char **) malloc(sizeof(char *) * 3);
@@ -214,8 +224,8 @@ int main() {
     // printf("The value of value_buffer is %s\n", value_buffer);
     //
     // free(value_buffer);
-    int test_ext = is_extended_key_usage_valid(cert);
-    printf("test ext: %d\n", test_ext);
+    // int test_ext = is_extended_key_usage_valid(cert);
+    // printf("test ext: %d\n", test_ext);
 
     X509_free(cert);
     BIO_free_all(certificate_bio);
@@ -287,19 +297,22 @@ int is_certificate_date_valid(X509 *cert) {
  * @return VALID, INVALID
  */
 int is_domain_name_valid(X509 *cert, char *certificate_url) {
+    int is_valid;
+
 	// Variable for CN
 	X509_NAME *cert_subject = NULL;
 	char common_name[MAX_DOMAIN_NAME] = "Subject CN NOT FOUND.";
 
 	// Variable for SAN
 	STACK_OF(GENERAL_NAME) *san_names = NULL;
-	int san_names_count, length_san_array, i;
+	int length_san_array;
 
 	/* Process to get Common Name */
 	cert_subject = X509_get_subject_name(cert);
-	X509_NAME_get_text_by_NID(cert_subject, NID_commonName, common_name, MAX_DOMAIN_NAME);
+	X509_NAME_get_text_by_NID(cert_subject, NID_commonName, common_name,
+        MAX_DOMAIN_NAME);
 
-	#ifdef DEBUG
+	#ifdef PRINT_DOMAIN
 	printf("Subject common name: %s\n", common_name);
 	#endif
 
@@ -307,41 +320,80 @@ int is_domain_name_valid(X509 *cert, char *certificate_url) {
 	san_names = X509_get_ext_d2i(cert, NID_subject_alt_name, NULL, NULL);
 
 	/** Validity check */
-	// If san names not null, we will process san names in addition to common name
+	// If san names not null, will process san names in addition to common name
 	if (san_names != NULL) {
-		san_names_count = sk_GENERAL_NAME_num(san_names);
-
-		// Array used to hold SAN
-		char **san_array = (char **) malloc(sizeof(char *) * san_names_count);
-		// Iterate and fill the SAN array
-		for (i=0; i<san_names_count; i++) {
-			const GENERAL_NAME *current_name = sk_GENERAL_NAME_value(san_names, i);
-
-			if (current_name->type == GEN_DNS) {
-				// Current name is a DNS name, let's check it
-				char *dns_name = (char *) ASN1_STRING_data(current_name->d.dNSName);
-				san_array[i] = (char *) malloc(sizeof(char) * (strlen(dns_name) + 1)); // extra nullbyte
-				strcpy(san_array[i], dns_name);
-			}
-		}
-		length_san_array = i; // elements filled
+        // Create and fill san_array
+        char **san_array = NULL;
+        length_san_array = fill_san_array(san_names, &san_array);
 		sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
 
-		#ifdef DEBUG
+		#ifdef PRINT_DOMAIN
+        int i;
 		for (i = 0; i < length_san_array; i++) {
 			printf("SAN: %s\n", san_array[i]);
 		}
 		#endif
 
 		// Check validity by comparing with both common name and san name
-		return (check_single_name(common_name, certificate_url) ||
-					check_san(san_array, length_san_array, certificate_url));
+        is_valid = check_single_name(common_name, certificate_url) ||
+					check_san(san_array, length_san_array, certificate_url);
+
+        // Free memory used by san array
+        free_san_array(&san_array, length_san_array);
 	}
 	// If there is no san name
 	else {
 		// Just compare with common name
-		return check_single_name(common_name, certificate_url);
+		is_valid = check_single_name(common_name, certificate_url);
 	}
+
+    return is_valid;
+}
+
+/**
+ * Used to fill san_array with san
+ * @param san_names: san available in STACK_OF(GENERAL_NAME) * format
+ * @param san_array: array that will be used as storage of san
+ * @return length_san_array: elements filled in san_array
+ */
+int fill_san_array(STACK_OF(GENERAL_NAME) *san_names, char ***san_array) {
+    int i, length_san_array;
+    int san_names_count = sk_GENERAL_NAME_num(san_names);
+
+    // Array used to hold SAN
+    *san_array = (char **) malloc(sizeof(char *) * san_names_count);
+    // Iterate and fill the SAN array
+    for (i=0; i<san_names_count; i++) {
+        const GENERAL_NAME *current_name = sk_GENERAL_NAME_value(san_names, i);
+
+        if (current_name->type == GEN_DNS) {
+            // Copy san name to san array
+            char *dns_name = (char *) ASN1_STRING_data(current_name->d.dNSName);
+            (*san_array)[i] = (char *) malloc(sizeof(char) * (strlen(dns_name)+1)); // extra nullbyte
+            strcpy((*san_array)[i], dns_name);
+        }
+    }
+    length_san_array = i;
+    return length_san_array;
+}
+
+/**
+ * Free element used by san_array
+ * @param san_array: array to be freed
+ * @param length_san_array: length of filled san_array
+ */
+void free_san_array(char ***san_array, int length_san_array) {
+    int i;
+
+    // Iterate inner san array
+    for (i=0; i < length_san_array; i++) {
+        free((*san_array)[i]);
+        (*san_array)[i] = NULL;
+    }
+
+    // Free the element itself
+    free(*san_array);
+    *san_array = NULL;
 }
 
 /**
@@ -352,8 +404,9 @@ int is_domain_name_valid(X509 *cert, char *certificate_url) {
 int is_valid_wildcard_exist(char *str) {
 	assert(str != NULL);
 
-	// If leftmost wildcard and not only containing wildcard
-	if (str[0] == '*' && str[1] == '.' && strlen(str) > WILDCARD_OFFSET) {
+	// If leftmost only wildcard and not only containing wildcard
+	if (str[WILDCARD_POSITION] == '*' && strlen(str) > WILDCARD_OFFSET &&
+        str[DOT_POSITION] == '.') {
 		return VALID;
 	}
 	return INVALID;
@@ -387,6 +440,10 @@ int check_single_name(char *single_name, char *host_name) {
 		 // Search for the first dot location and get everything after the first dot
 		 for (i = 0; i < strlen(host_name); i++) {
 			 if (host_name[i] == '.') {
+                 // Handle condition when the first element is .
+                 if (i == 0) {
+                     return INVALID;
+                 }
 				 offset_index_host = i + 1;
 				 break;
 			 }
