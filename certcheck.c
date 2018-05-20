@@ -34,7 +34,9 @@
 
 // Used for printing information (need to remove this before submitting)
 // #define PRINT_DATE
-#define PRINT_DOMAIN
+// #define PRINT_DOMAIN
+// # define PRINT_KEY_LENGTH
+// #define PRINT_KEY_USAGE
 
 /******************************FUNCTION*DECLARATION***************************/
 
@@ -93,143 +95,20 @@ int main() {
     printf("Domain name validation: %d\n", is_valid);
     #endif
 
+    /** RSA key length validation */
+    is_valid = is_key_length_valid(cert);
+    #ifdef PRINT_KEY_LENGTH
+    printf("Key length validation: %d\n", is_valid);
+    #endif
 
-    // int test = is_domain_name_valid(cert, "b*r.com");
-    // char **san_array = (char **) malloc(sizeof(char *) * 3);
-    // san_array[0] = (char *) malloc(sizeof(char) * (strlen("*.google.com") + 1));
-    // strcpy(san_array[0], "*.google.com");
-    // san_array[1] = (char *) malloc(sizeof(char) * (strlen("drive.google.co.au") + 1));
-    // strcpy(san_array[1], "drive.google.co.au");
-    // san_array[2] = (char *) malloc(sizeof(char) * (strlen("anon.com") + 1));
-    // strcpy(san_array[2], "anon.com");
-    //
-    //
-    // // char san_array[][256] = {"google.com.au", "*.google.com", "*.anonymous.com"};
-    // // int i;
-    // // for (i = 0; i < 3; i++) {
-    // //     printf("%s\n",san_array[i]);
-    // // }
-    // int test = check_san(san_array, 3, "anon.com");
-    // // int test = check_single_name("*.google.com.au", "drive.google.com.au");
-    // printf("test: %d\n", test);
-
-    /**************** Key Length validation ******************************/
-    is_key_length_valid(cert);
-
-    /**************** correct key usage (basic constraint + enhanced key usage) ******************************/
-
-    // BASIC_CONSTRAINTS *bs;
-    // // PROXY_CERT_INFO_EXTENSION *pci;
-    // // ASN1_BIT_STRING *usage;
-    // // ASN1_BIT_STRING *ns;
-    // // EXTENDED_KEY_USAGE *extusage;
-    // // X509_EXTENSION *ex;
-    //
-    // // int k;
-    // // if (cert->ex_flags & EXFLAG_SET)
-    // //     return;
-    // // X509_digest(cert, EVP_sha1(), cert->sha1_hash, NULL);
-    // // /* V1 should mean no extensions ... */
-    // // if (!X509_get_version(cert))
-    // //     cert->ex_flags |= EXFLAG_V1;
-    // /* Handle basic constraints */
-    // if ((bs = X509_get_ext_d2i(cert, NID_basic_constraints, NULL, NULL))) {
-    //     // char *ca = ASN1_STRING_data(bs->ca);
-    //     printf("basic constraint: %d\n", bs->ca);
-    //     // if (bs->ca)
-    //     //     cert->ex_flags |= EXFLAG_CA;
-    //     // if (bs->pathlen) {
-    //     //     if ((bs->pathlen->type == V_ASN1_NEG_INTEGER)
-    //     //         || !bs->ca) {
-    //     //         cert->ex_flags |= EXFLAG_INVALID;
-    //     //         cert->ex_pathlen = 0;
-    //     //     } else
-    //     //         cert->ex_pathlen = ASN1_INTEGER_get(bs->pathlen);
-    //     // } else
-    //     //     cert->ex_pathlen = -1;
-    //     BASIC_CONSTRAINTS_free(bs);
-    //     // cert->ex_flags |= EXFLAG_BCONS;
-    // }
-    // int test_ca = is_ca_false_valid(cert);
-    // printf("CA: FALSE is %d\n", test_ca);
-
-    // Extract extended key usage
-    // STACK_OF(ASN1_OBJECT) *extended_key_usage = (STACK_OF(ASN1_OBJECT) *) X509_get_ext_d2i(cert, NID_ext_key_usage, NULL, NULL);
-    // const char *key_usage_value = NULL;
-    // int usage_id = 0;
-    // // Get extended key usage value
-    // while (sk_ASN1_OBJECT_num(extended_key_usage) > 0) {
-    //     // Get everything
-    //     usage_id = OBJ_obj2nid(sk_ASN1_OBJECT_pop(extended_key_usage));
-    //     key_usage_value = OBJ_nid2sn(usage_id);
-    //     printf("ext key usage: %s \n", key_usage_value);
-    // }
-    // char extension_name[1024];
-    // char *extension_value = "hello";
-    // get_extension_name_value(cert, NID_ext_key_usage, extension_name, &extension_value);
-    //
-    // printf("Extension %s: %s\n", extension_name, extension_value);
-
-
-    /********************************************************************/
-
-    // // Analysing the certificate value
-    // cert_issuer = X509_get_issuer_name(cert);
-    // char issuer_cn[256] = "Issuer CN NOT FOUND";
-    // X509_NAME_get_text_by_NID(cert_issuer, NID_commonName, issuer_cn, 256);
-    // printf("Issuer CommonName:%s\n", issuer_cn);
-
-    // List of extensions available at https://www.openssl.org/docs/man1.1.0/crypto/X509_REVOKED_get0_extensions.html
-    // Need to check extension exists and is not null
-    // X509_EXTENSION *ex = X509_get_ext(cert, X509_get_ext_by_NID(cert, NID_ext_key_usage, -1));
-    // ASN1_OBJECT *obj = X509_EXTENSION_get_object(ex);
-    // char buff[1024];
-    // OBJ_obj2txt(buff, 1024, obj, 0);
-    // printf("Extension:%s\n", buff);
-    //
-    // BUF_MEM *bptr = NULL;
-    // char *buf = NULL;
-    //
-    // BIO *bio = BIO_new(BIO_s_mem());
-    // if (!X509V3_EXT_print(bio, ex, 0, 0))
-    // {
-    //     fprintf(stderr, "Error in reading extensions");
-    // }
-    // BIO_flush(bio);
-    // BIO_get_mem_ptr(bio, &bptr);
-    //
-    // //bptr->data is not NULL terminated - add null character
-    // buf = (char *)malloc((bptr->length + 1) * sizeof(char));
-    // memcpy(buf, bptr->data, bptr->length);
-    // buf[bptr->length] = '\0';
-    //
-    // //Can print or parse value
-    // printf("%s\n", buf);
-    //
-    // // Now buff contain the extended key usage, validation
-    // char *ret = strstr(buf, EXTENDED_KEY_AUTH);
-    // if (ret == NULL) {
-    //     printf("invalid");
-    // }
-    // else {
-    //     printf("valid");
-    // }
-    //
-    // free(buf);
-    // char name_buffer[NAME_BUFFER_LENGTH];
-    // char *value_buffer;
-    //
-    // ext_name_value(cert, NID_ext_key_usage, name_buffer, &value_buffer);
-    // printf("The value of name buffer is %s\n", name_buffer);
-    // printf("The value of value_buffer is %s\n", value_buffer);
-    //
-    // free(value_buffer);
-    // int test_ext = is_extended_key_usage_valid(cert);
-    // printf("test ext: %d\n", test_ext);
+    /** Correct key usage validation (Basic Constraint & Extended Key Usage) */
+    is_valid = (is_ca_false_valid(cert) && is_extended_key_usage_valid(cert));
+    #ifdef PRINT_KEY_USAGE
+    printf("Key usage validation: %d\n", is_valid);
+    #endif
 
     X509_free(cert);
     BIO_free_all(certificate_bio);
-    // BIO_free_all(bio);
     return 0;
 }
 
@@ -501,6 +380,10 @@ int is_key_length_valid(X509 *cert) {
 		is_valid = INVALID;
 	}
 
+    #ifdef PRINT_KEY_LENGTH
+    printf("key length size (bits): %d\n", size_in_bits);
+    #endif
+
 	RSA_free(rsa);
 
 	return is_valid;
@@ -548,9 +431,9 @@ int is_extended_key_usage_valid(X509* cert) {
     // Get the usage buffer name and value of the extended usage
     ext_name_value(cert, NID_ext_key_usage, usage_buffer, &value_buffer);
 
-    #ifdef DEBUG
-    printf("The value of name buffer is %s\n", name_buffer);
-    printf("The value of value_buffer is %s\n", value_buffer);
+    #ifdef PRINT_KEY_USAGE
+    printf("Extension buffer: %s\n", usage_buffer);
+    printf("Value buffer: %s\n", value_buffer);
     #endif
 
     // Check using substring method with value_buffer
@@ -575,8 +458,7 @@ int is_extended_key_usage_valid(X509* cert) {
  */
 void ext_name_value(X509 *cert, int NID, char name_buffer[], char **value_buffer) {
     // Need to check extension exists and is not null
-    X509_EXTENSION *ex = X509_get_ext(cert, X509_get_ext_by_NID(cert,
-        NID, -1));
+    X509_EXTENSION *ex = X509_get_ext(cert, X509_get_ext_by_NID(cert, NID, -1));
     // If extension is null then immediately return and will be invalid
     if (ex == NULL) {
         return;
