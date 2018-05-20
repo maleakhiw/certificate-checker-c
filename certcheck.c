@@ -21,6 +21,8 @@
 
 /********************************CONSTANT**************************************/
 
+#define ARG_COUNT 2
+#define FILE_PATH_INDEX 1
 #define MAX_DOMAIN_NAME 256
 #define WILDCARD_POSITION 0
 #define DOT_POSITION 1
@@ -54,13 +56,22 @@ void ext_name_value(X509 *cert, int NID, char name_buffer[], char **value_buffer
 
 /*********************************MAIN*FUNCTION********************************/
 
-int main() {
-    const char test_cert_example[] = "./cert-file2.pem";
+int main(int argc, char *argv[]) {
+    char *test_cert_example;
     BIO *certificate_bio = NULL;
     X509 *cert = NULL;
     int is_valid;
 
-    /** Initialise open ssl and bio certificate */
+    /* Initialise (opening file check command line argument) */
+    if (argc != ARG_COUNT) {
+        fprintf(stderr, "Please use the correct format: ./certcheck [pathToTestFile]\n");
+        exit(EXIT_FAILURE);
+    }
+    // Read file name
+    test_cert_example = (char *) malloc(sizeof(char) * (strlen(argv[FILE_PATH_INDEX])+1));
+    strcpy(test_cert_example, argv[FILE_PATH_INDEX]);
+
+    /* Initialise open ssl and bio certificate */
     // Initialise openSSL
     OpenSSL_add_all_algorithms();
     ERR_load_BIO_strings();
@@ -72,36 +83,36 @@ int main() {
     // Read certificate into BIO
     if (!(BIO_read_filename(certificate_bio, test_cert_example)))
     {
-        fprintf(stderr, "Error in reading cert BIO filename");
+        fprintf(stderr, "Error in reading cert BIO filename\n");
         exit(EXIT_FAILURE);
     }
     // Read into cert which contains the X509 certificate and can be used to analyse the certificate
     if (!(cert = PEM_read_bio_X509(certificate_bio, NULL, 0, NULL)))
     {
-        fprintf(stderr, "Error in loading certificate");
+        fprintf(stderr, "Error in loading certificate\n");
         exit(EXIT_FAILURE);
     }
 
-    /** Testing validation of dates */
+    /* Testing validation of dates */
     // Read not before and not after date
     is_valid = is_certificate_date_valid(cert);
     #ifdef PRINT_DATE
     printf("Date Validation: %d\n", is_valid);
     #endif
 
-    /** Domain name validation (CN & SAN) */
+    /* Domain name validation (CN & SAN) */
     is_valid = is_domain_name_valid(cert, "www.comp30023.com");
     #ifdef PRINT_DOMAIN
     printf("Domain name validation: %d\n", is_valid);
     #endif
 
-    /** RSA key length validation */
+    /* RSA key length validation */
     is_valid = is_key_length_valid(cert);
     #ifdef PRINT_KEY_LENGTH
     printf("Key length validation: %d\n", is_valid);
     #endif
 
-    /** Correct key usage validation (Basic Constraint & Extended Key Usage) */
+    /* Correct key usage validation (Basic Constraint & Extended Key Usage) */
     is_valid = (is_ca_false_valid(cert) && is_extended_key_usage_valid(cert));
     #ifdef PRINT_KEY_USAGE
     printf("Key usage validation: %d\n", is_valid);
