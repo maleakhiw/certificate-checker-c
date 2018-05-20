@@ -33,10 +33,10 @@
 #define NAME_BUFFER_LENGTH 1024
 
 // Used for printing information (need to remove this before submitting)
-// #define PRINT_DATE
-// #define PRINT_DOMAIN
-// # define PRINT_KEY_LENGTH
-// #define PRINT_KEY_USAGE
+#define PRINT_DATE
+#define PRINT_DOMAIN
+#define PRINT_KEY_LENGTH
+#define PRINT_KEY_USAGE
 
 /******************************FUNCTION*DECLARATION***************************/
 
@@ -49,8 +49,8 @@ int check_single_name(char *single_name, char *host_name);
 int check_san(char **san_array, int length_san_array, char *host_name);
 int is_key_length_valid(X509 *cert);
 int is_ca_false_valid(X509 *cert);
-void ext_name_value(X509 *cert, int NID, char name_buffer[], char **value_buffer);
 int is_extended_key_usage_valid(X509* cert);
+void ext_name_value(X509 *cert, int NID, char name_buffer[], char **value_buffer);
 
 /*********************************MAIN*FUNCTION********************************/
 
@@ -90,7 +90,7 @@ int main() {
     #endif
 
     /** Domain name validation (CN & SAN) */
-    is_valid = is_domain_name_valid(cert, "googl.com");
+    is_valid = is_domain_name_valid(cert, "www.comp30023.com");
     #ifdef PRINT_DOMAIN
     printf("Domain name validation: %d\n", is_valid);
     #endif
