@@ -21,12 +21,6 @@
 #define EXTENDED_KEY_AUTH "TLS Web Server Authentication"
 #define NAME_BUFFER_LENGTH 1024
 
-// Used for printing information (need to remove this before submitting)
-// #define PRINT_DATE
-// #define PRINT_DOMAIN
-// #define PRINT_KEY_LENGTH
-// #define PRINT_KEY_USAGE
-
 /******************************************************************************/
 /** Certificate Validation Function */
 
@@ -69,21 +63,6 @@ int is_certificate_date_valid(X509 *cert) {
 
 	not_before = X509_get_notBefore(cert);
 	not_after = X509_get_notAfter(cert);
-
-    #ifdef PRINT_DATE
-    BIO *b;
-    b = BIO_new_fp(stdout, BIO_NOCLOSE);
-
-    printf("Not before date: ");
-    ASN1_TIME_print(b, not_before);
-    printf("\n");
-
-    printf("Not after date: ");
-    ASN1_TIME_print(b, not_after);
-    printf("\n");
-
-    BIO_free(b);
-    #endif
 
 	// Current date should be between the not before and not after date
 	// Check not_before first with today's date, immediately return 0 (invalid)
@@ -135,10 +114,6 @@ int is_domain_name_valid(X509 *cert, char *certificate_url) {
 	X509_NAME_get_text_by_NID(cert_subject, NID_commonName, common_name,
         MAX_DOMAIN_NAME);
 
-	#ifdef PRINT_DOMAIN
-	printf("Subject common name: %s\n", common_name);
-	#endif
-
 	/* Process to get SAN */
 	san_names = X509_get_ext_d2i(cert, NID_subject_alt_name, NULL, NULL);
 
@@ -149,13 +124,6 @@ int is_domain_name_valid(X509 *cert, char *certificate_url) {
         char **san_array = NULL;
         length_san_array = fill_san_array(san_names, &san_array);
 		sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
-
-		#ifdef PRINT_DOMAIN
-        int i;
-		for (i = 0; i < length_san_array; i++) {
-			printf("SAN: %s\n", san_array[i]);
-		}
-		#endif
 
 		// Check validity by comparing with both common name and san name
         is_valid = check_single_name(common_name, certificate_url) ||
@@ -326,10 +294,6 @@ int is_key_length_valid(X509 *cert) {
 		is_valid = INVALID;
 	}
 
-    #ifdef PRINT_KEY_LENGTH
-    printf("key length size (bits): %d\n", size_in_bits);
-    #endif
-
 	RSA_free(rsa);
 
 	return is_valid;
@@ -376,11 +340,6 @@ int is_extended_key_usage_valid(X509* cert) {
 
     // Get the usage buffer name and value of the extended usage
     ext_name_value(cert, NID_ext_key_usage, usage_buffer, &value_buffer);
-
-    #ifdef PRINT_KEY_USAGE
-    printf("Extension buffer: %s\n", usage_buffer);
-    printf("Value buffer: %s\n", value_buffer);
-    #endif
 
     // Check using substring method with value_buffer
     ret = strstr(value_buffer, EXTENDED_KEY_AUTH);
@@ -468,27 +427,15 @@ int full_certificate_validation(char *certificate_name, char *host_name) {
     /* Testing validation of dates */
     // Read not before and not after date
     is_valid_date = is_certificate_date_valid(cert);
-    #ifdef PRINT_DATE
-    printf("Date Validation: %d\n", is_valid_date);
-    #endif
 
     /* Domain name validation (CN & SAN) */
     is_valid_domain = is_domain_name_valid(cert, host_name);
-    #ifdef PRINT_DOMAIN
-    printf("Domain name validation: %d\n", is_valid_domain);
-    #endif
 
     /* RSA key length validation */
     is_valid_length = is_key_length_valid(cert);
-    #ifdef PRINT_KEY_LENGTH
-    printf("Key length validation: %d\n", is_valid_length);
-    #endif
 
     /* Correct key usage validation (Basic Constraint & Extended Key Usage) */
     is_valid_usage = (is_ca_false_valid(cert) && is_extended_key_usage_valid(cert));
-    #ifdef PRINT_KEY_USAGE
-    printf("Key usage validation: %d\n\n", is_valid_usage);
-    #endif
 
     X509_free(cert);
     BIO_free_all(certificate_bio);
