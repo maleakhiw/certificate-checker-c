@@ -42,9 +42,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     // Read file name
-    csv_file = (char *) malloc(sizeof(char) * (strlen(argv[FILE_PATH_INDEX])+1));
-    assert(csv_file != NULL);
-    strcpy(csv_file, argv[FILE_PATH_INDEX]);
+    csv_file = argv[FILE_PATH_INDEX];
 
     // Read CSV from the specified file name
     // Opening file for reading and writing
@@ -75,8 +73,6 @@ int main(int argc, char *argv[]) {
         certificate_name = NULL;
         host_name = NULL;
     }
-
-    free(csv_file);
 
     // Close file
     fclose(input_fp);

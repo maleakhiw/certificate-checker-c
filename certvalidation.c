@@ -41,12 +41,12 @@ void get_certificate_host_name(char *line, char **certificate_name, char **host_
     // Tokenize line
     token = strtok(new_line, delimiter_csv);
     *certificate_name = (char *) malloc(sizeof(char) * (strlen(line)+1));
-    assert(certificate_name != NULL);
+    assert(*certificate_name != NULL);
     strcpy(*certificate_name, token);
 
     token = strtok(NULL, delimiter_new_line);
     *host_name = (char *) malloc(sizeof(char) * (strlen(line)+1));
-    assert(host_name != NULL);
+    assert(*host_name != NULL);
     strcpy(*host_name, token);
 
     free(new_line);
@@ -296,7 +296,7 @@ int is_key_length_valid(X509 *cert) {
 
 	RSA_free(rsa);
     EVP_PKEY_free(public_key);
-    
+
 	return is_valid;
 }
 
