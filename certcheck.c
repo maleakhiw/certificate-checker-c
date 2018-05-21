@@ -1,6 +1,6 @@
 /**
  * Main C files for TLS certificate check (COMP30023) - Project 2
- * Author: Maleakhi Agung Wijaya
+ * Author: Maleakhi Agung Wijaya (maleakhiw)
  * Date: 21/05/2018
  */
 

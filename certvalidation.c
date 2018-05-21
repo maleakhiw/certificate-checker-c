@@ -1,7 +1,7 @@
 /**
  * C file used to captures the function declaration of certificate Validation
  * logic for COMP30023 (Computer Systems) Project 2 - TLS Certificate Checking
- * Author: Maleakhi Agung Wijaya
+ * Author: Maleakhi Agung Wijaya (maleakhiw)
  * Date: 21/05/2018
  */
 
