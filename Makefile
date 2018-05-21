@@ -5,13 +5,20 @@
 # Constant
 CC = gcc
 CFLAGS = -lssl -lcrypto
+MAIN = certcheck
 
-# Default if user type 'make'
-default: certcheck
+# Default if user type 'make' (call certcheck)
+default: $(MAIN)
 
-certcheck: certcheck.c
-	$(CC) -Wall -o certcheck certcheck.c $(CFLAGS)
+# Create certcheck executable
+$(MAIN): certcheck.c certvalidation.o
+	$(CC) -Wall -o $(MAIN) certcheck.c certvalidation.o $(CFLAGS)
+
+# Create object file for certvalidation
+certvalidation.o: certvalidation.c certvalidation.h
+	$(CC) -c certvalidation.c
 
 # To clean the executable and object file
 clean:
+	-rm -f *.o
 	-rm -f certcheck
