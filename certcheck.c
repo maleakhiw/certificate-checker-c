@@ -32,10 +32,8 @@ char *read_line(FILE *input_fp);
 /** Main Function */
 
 int main(int argc, char *argv[]) {
-    char *csv_file = NULL;
+    char *csv_file = NULL, *line = NULL, *certificate_name = NULL, *host_name = NULL;
     FILE *input_fp = NULL, *output_fp = NULL;
-    char *line = NULL;
-    char *certificate_name = NULL, *host_name = NULL;
     int is_valid;
 
     /* Initialise (opening file check command line argument) & read csv */

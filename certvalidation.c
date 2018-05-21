@@ -295,7 +295,8 @@ int is_key_length_valid(X509 *cert) {
 	}
 
 	RSA_free(rsa);
-
+    EVP_PKEY_free(public_key);
+    
 	return is_valid;
 }
 
